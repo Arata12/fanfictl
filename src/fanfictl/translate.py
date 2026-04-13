@@ -6,7 +6,9 @@ from typing import Callable
 from google import genai
 from google.genai import types
 
+from fanfictl.keystore import RuntimeAPIKey
 from fanfictl.models import Checkpoint, CheckpointChapter, Work
+from fanfictl.quota import DailyQuotaExceeded, QuotaTracker
 
 
 TITLE_SYSTEM = "You translate Pixiv fanfiction titles into natural English. Return only the translated title."
@@ -18,11 +20,18 @@ PROSE_SYSTEM = (
 
 
 class GeminiStudioProvider:
-    def __init__(self, api_key: str, model_name: str) -> None:
-        if not api_key:
+    def __init__(
+        self,
+        api_keys: list[RuntimeAPIKey],
+        model_name: str,
+        quota_tracker: QuotaTracker | None = None,
+    ) -> None:
+        if not api_keys:
             raise RuntimeError("GEMINI_API_KEY is required for translation")
         self.model_name = model_name
-        self.client = genai.Client(api_key=api_key)
+        self.keys = api_keys
+        self.clients = {item.id: genai.Client(api_key=item.key) for item in api_keys}
+        self.quota_tracker = quota_tracker
 
     def translate_title(self, original_title: str) -> str:
         return self._generate(
@@ -43,9 +52,12 @@ class GeminiStudioProvider:
 
     def _generate(self, system_instruction: str, prompt: str) -> str:
         last_error: Exception | None = None
-        for attempt in range(3):
+        selected_key = self.keys[0]
+        for attempt in range(max(3, len(self.keys) * 2)):
             try:
-                response = self.client.models.generate_content(
+                if self.quota_tracker:
+                    selected_key = self.quota_tracker.acquire_request_slot()
+                response = self.clients[selected_key.id].models.generate_content(
                     model=self.model_name,
                     contents=prompt,
                     config=types.GenerateContentConfig(
@@ -55,10 +67,25 @@ class GeminiStudioProvider:
                 if not response.text:
                     raise RuntimeError("Empty response from Gemini API")
                 return response.text
+            except DailyQuotaExceeded:
+                raise
             except Exception as exc:  # noqa: BLE001
                 last_error = exc
+                if self.quota_tracker and _looks_like_quota_error(exc):
+                    self.quota_tracker.record_quota_error(selected_key.id, str(exc))
+                    continue
                 time.sleep(1.5 * (attempt + 1))
         raise RuntimeError(f"Translation failed: {last_error}") from last_error
+
+
+def _looks_like_quota_error(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return (
+        "429" in text
+        or "quota" in text
+        or "rate limit" in text
+        or "resource_exhausted" in text
+    )
 
 
 def split_markdown_into_chunks(markdown: str, max_chars: int = 5000) -> list[str]:

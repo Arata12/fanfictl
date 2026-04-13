@@ -11,8 +11,10 @@ from fanfictl.exporters import (
     write_markdown,
     write_text,
 )
+from fanfictl.keystore import APIKeyStore
 from fanfictl.models import Checkpoint, ExportFormat, Work, WorkKind
 from fanfictl.pixiv import PixivClient, parse_pixiv_url
+from fanfictl.quota import QuotaTracker
 from fanfictl.storage import (
     ensure_work_dirs,
     load_checkpoint,
@@ -61,9 +63,11 @@ def translate_url_to_outputs(
 ) -> tuple[Work, Path]:
     if target.lower() != "en":
         raise ValueError("v1 only supports English output")
-    if not settings.gemini_api_key:
+    key_store = APIKeyStore(settings)
+    runtime_keys = key_store.runtime_keys()
+    if not runtime_keys:
         raise RuntimeError(
-            "GEMINI_API_KEY is required for translation. Put it in .env or your shell environment."
+            "At least one Gemini API key is required. Put one in .env or add fallback keys in the web dashboard."
         )
 
     if progress_callback:
@@ -83,8 +87,9 @@ def translate_url_to_outputs(
         )
 
     provider = GeminiStudioProvider(
-        api_key=settings.gemini_api_key,
+        api_keys=runtime_keys,
         model_name=model or settings.gemini_model,
+        quota_tracker=QuotaTracker(settings, runtime_keys),
     )
 
     if progress_callback:

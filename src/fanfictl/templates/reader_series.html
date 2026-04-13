@@ -3,14 +3,14 @@
 <article class="reader-shell">
   <header class="reader-head">
     <h1>{{ entry.work.translated_title or entry.work.original_title }}</h1>
-    <p class="muted">{{ entry.work.author_name }} · <a href="{{ entry.work.source_url }}">Pixiv source</a></p>
-    <div class="actions-row">
+    <p class="reader-meta">{{ entry.work.author_name }} · <a href="{{ entry.work.source_url }}">Pixiv source</a></p>
+    <div class="reader-actions">
       {% for fmt in entry.outputs.keys() %}
         <a class="button button--ghost" href="/download/{{ entry.work.public_id }}/{{ fmt }}">{{ fmt|upper }}</a>
       {% endfor %}
     </div>
   </header>
-  <section class="panel panel--wide">
+  <section class="reader-series-list">
     <h2>Chapters</h2>
     <ol class="chapter-list">
       {% for chapter in entry.work.chapters %}

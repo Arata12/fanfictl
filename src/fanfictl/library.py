@@ -13,8 +13,9 @@ from fanfictl.models import ExportFormat, Work, WorkKind
 from fanfictl.storage import save_metadata, slugify
 
 
-MARKDOWN = MarkdownIt("commonmark", {"html": True, "linkify": True})
+MARKDOWN = MarkdownIt("commonmark", {"html": True, "linkify": True, "breaks": True})
 ALLOWED_TAGS = list(bleach.sanitizer.ALLOWED_TAGS) + [
+    "br",
     "p",
     "h1",
     "h2",

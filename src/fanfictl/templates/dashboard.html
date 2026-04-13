@@ -4,6 +4,9 @@
   <section class="panel panel--wide">
     <h1>New import</h1>
     <p class="muted">Paste a public Pixiv novel or series URL. The app translates it into English and stores the Markdown and exports.</p>
+    {% if form_error %}
+      <p class="notice notice--error">{{ form_error }}</p>
+    {% endif %}
     {% if using_default_admin %}
       <p class="notice">You are using the default admin credentials. Change <code>ADMIN_USERNAME</code> and <code>ADMIN_PASSWORD</code> in your env later.</p>
     {% endif %}
@@ -32,6 +35,52 @@
         </div>
       </fieldset>
       <button class="button" type="submit">Start translation</button>
+    </form>
+  </section>
+
+  <section class="panel">
+    <h2>Gemma quota</h2>
+    <div class="quota-grid">
+      <div>
+        <span class="muted">This minute</span>
+        <strong>{{ quota.minute_used }} / {{ quota.minute_limit }}</strong>
+      </div>
+      <div>
+        <span class="muted">Today</span>
+        <strong>{{ quota.daily_used }} / {{ quota.daily_limit }}</strong>
+      </div>
+      <div>
+        <span class="muted">Reset</span>
+        <strong>{{ quota.reset_at }}</strong>
+      </div>
+    </div>
+    {% if quota.last_error %}
+      <p class="notice">Last quota event: {{ quota.last_error }}</p>
+    {% endif %}
+    {% if keys %}
+      <ul class="key-list">
+        {% for key in keys %}
+          <li>
+            <div>
+              <strong>{{ key.masked }}</strong>
+              <div class="muted small">{{ key.source }}{% if key.is_default %} · default{% endif %}</div>
+            </div>
+            {% if not key.is_default %}
+              <form action="/keys/{{ key.id }}/delete" method="post">
+                <button class="button button--ghost" type="submit">Remove</button>
+              </form>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+    <h3 class="subhead">Fallback keys</h3>
+    <form action="/keys" method="post" class="stack-16">
+      <label>
+        <span>Additional Gemini API key</span>
+        <input name="api_key" type="password" placeholder="AIza..." required>
+      </label>
+      <button class="button" type="submit">Add fallback key</button>
     </form>
   </section>
 

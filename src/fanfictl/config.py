@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 
@@ -20,6 +21,9 @@ class Settings:
         self.admin_password = os.getenv("ADMIN_PASSWORD", "admin")
         self.host = os.getenv("HOST", "0.0.0.0")
         self.port = int(os.getenv("PORT", "8000"))
+        self.gemini_rpm_limit = int(os.getenv("GEMINI_RPM_LIMIT", "15"))
+        self.gemini_rpd_limit = int(os.getenv("GEMINI_RPD_LIMIT", "1500"))
+        self.quota_timezone = ZoneInfo("America/Los_Angeles")
 
     @property
     def uses_default_admin_credentials(self) -> bool:

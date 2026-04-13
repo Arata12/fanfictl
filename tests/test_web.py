@@ -7,7 +7,9 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from fanfictl.config import Settings
+from fanfictl.keystore import APIKeyStore
 from fanfictl.models import Chapter, Work, WorkKind
+from fanfictl.quota import QuotaTracker
 from fanfictl.storage import ensure_work_dirs, save_metadata
 from fanfictl.webapp import build_app
 
@@ -62,10 +64,105 @@ class WebTests(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertIn("New import", response.text)
             self.assertIn("English Title", response.text)
+            self.assertIn("Gemma quota", response.text)
+            self.assertIn("Fallback keys", response.text)
 
             response = client.get("/read/publictoken-english-title")
             self.assertEqual(response.status_code, 200)
             self.assertIn("English Title", response.text)
+
+    def test_reader_preserves_single_line_breaks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp) / "output"
+            settings = Settings()
+            settings.output_dir = output_dir
+            settings.app_base_url = "http://localhost:8000"
+            settings.app_secret_key = "test-secret"
+            settings.admin_username = "admin"
+            settings.admin_password = "admin"
+
+            work = Work(
+                kind=WorkKind.NOVEL,
+                pixiv_id=789,
+                source_url="https://example.com",
+                public_id="breaktoken",
+                original_title="原題",
+                translated_title="Readable Title",
+                author_name="Author",
+                chapters=[
+                    Chapter(
+                        position=1,
+                        pixiv_novel_id=789,
+                        original_title="One",
+                        translated_title="One",
+                        source_markdown="# One\n\n[first line]\n[second line]",
+                        translated_markdown="# One\n\n[first line]\n[second line]",
+                    )
+                ],
+            )
+            root = ensure_work_dirs(output_dir, work)
+            save_metadata(root, work)
+            (root / "translated.md").write_text(
+                "# Readable Title\n\n[first line]\n[second line]", encoding="utf-8"
+            )
+
+            app = build_app(settings)
+            client = TestClient(app)
+            response = client.get("/read/breaktoken-readable-title")
+
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("<br>", response.text)
+
+    def test_can_add_fallback_key_from_dashboard(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp) / "output"
+            settings = Settings()
+            settings.output_dir = output_dir
+            settings.app_base_url = "http://localhost:8000"
+            settings.app_secret_key = "test-secret"
+            settings.admin_username = "admin"
+            settings.admin_password = "admin"
+            settings.gemini_api_key = "env-primary-key"
+
+            app = build_app(settings)
+            client = TestClient(app)
+            client.post("/login", data={"username": "admin", "password": "admin"})
+            response = client.post(
+                "/keys",
+                data={"api_key": "extra-fallback-key"},
+                follow_redirects=True,
+            )
+
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("Fallback keys", response.text)
+            self.assertEqual(len(APIKeyStore(settings).runtime_keys()), 2)
+
+    def test_submit_blocked_when_daily_quota_exhausted(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp) / "output"
+            settings = Settings()
+            settings.output_dir = output_dir
+            settings.app_base_url = "http://localhost:8000"
+            settings.app_secret_key = "test-secret"
+            settings.admin_username = "admin"
+            settings.admin_password = "admin"
+            settings.gemini_rpm_limit = settings.gemini_rpd_limit + 1
+            settings.gemini_api_key = "env-primary-key"
+
+            tracker = QuotaTracker(settings, APIKeyStore(settings).runtime_keys())
+            for _ in range(settings.gemini_rpd_limit):
+                tracker.acquire_request_slot()
+
+            app = build_app(settings)
+            client = TestClient(app)
+            client.post("/login", data={"username": "admin", "password": "admin"})
+            response = client.post(
+                "/submit",
+                data={"source_url": "https://www.pixiv.net/novel/show.php?id=27402134"},
+            )
+
+            self.assertEqual(response.status_code, 429)
+            self.assertIn("Daily Gemini request limit reached", response.text)
 
 
 if __name__ == "__main__":

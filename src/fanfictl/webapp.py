@@ -11,6 +11,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from fanfictl.config import Settings
 from fanfictl.jobs import JobManager
+from fanfictl.keystore import APIKeyStore
 from fanfictl.library import (
     get_work_by_public_id,
     get_work_by_root_name,
@@ -20,6 +21,7 @@ from fanfictl.library import (
     render_work_html,
 )
 from fanfictl.models import ExportFormat
+from fanfictl.quota import QuotaTracker
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
@@ -28,14 +30,6 @@ TEMPLATES = Jinja2Templates(directory=str(PACKAGE_ROOT / "templates"))
 
 def build_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings()
-    if (
-        settings.uses_default_admin_credentials
-        and "localhost" not in settings.app_base_url
-        and "127.0.0.1" not in settings.app_base_url
-    ):
-        raise RuntimeError(
-            "Refusing to start with default admin credentials on a non-local APP_BASE_URL."
-        )
     if (
         settings.app_secret_key == "change-me-secret"
         and "localhost" not in settings.app_base_url
@@ -50,7 +44,29 @@ def build_app(settings: Settings | None = None) -> FastAPI:
         "/static", StaticFiles(directory=str(PACKAGE_ROOT / "static")), name="static"
     )
     app.state.settings = settings
+    app.state.key_store = APIKeyStore(settings)
     app.state.jobs = JobManager(settings)
+
+    def render_dashboard(
+        request: Request, error: str | None = None, status_code: int = 200
+    ):
+        runtime_keys = app.state.key_store.runtime_keys()
+        quota = QuotaTracker(settings, runtime_keys).snapshot()
+        return TEMPLATES.TemplateResponse(
+            request,
+            "dashboard.html",
+            {
+                "title": "Dashboard",
+                "jobs": app.state.jobs.store.list_recent(),
+                "works": list_works(settings.output_dir),
+                "using_default_admin": settings.uses_default_admin_credentials,
+                "base_url": settings.app_base_url,
+                "quota": quota,
+                "keys": app.state.key_store.list_keys(),
+                "form_error": error,
+            },
+            status_code=status_code,
+        )
 
     @app.get("/", response_class=HTMLResponse)
     def index(request: Request):
@@ -97,17 +113,7 @@ def build_app(settings: Settings | None = None) -> FastAPI:
         redirect = require_admin(request)
         if redirect:
             return redirect
-        return TEMPLATES.TemplateResponse(
-            request,
-            "dashboard.html",
-            {
-                "title": "Dashboard",
-                "jobs": app.state.jobs.store.list_recent(),
-                "works": list_works(settings.output_dir),
-                "using_default_admin": settings.uses_default_admin_credentials,
-                "base_url": settings.app_base_url,
-            },
-        )
+        return render_dashboard(request)
 
     @app.post("/submit")
     def submit(
@@ -123,6 +129,13 @@ def build_app(settings: Settings | None = None) -> FastAPI:
         redirect = require_admin(request)
         if redirect:
             return redirect
+        quota = QuotaTracker(settings, app.state.key_store.runtime_keys())
+        if quota.daily_limit_reached():
+            return render_dashboard(
+                request,
+                error="Daily Gemini request limit reached. Wait until the reset time shown below.",
+                status_code=429,
+            )
         formats = []
         if export_md:
             formats.append(ExportFormat.MD)
@@ -147,6 +160,25 @@ def build_app(settings: Settings | None = None) -> FastAPI:
             model=None,
         )
         return RedirectResponse(f"/jobs/{job.id}", status_code=303)
+
+    @app.post("/keys")
+    def add_key(request: Request, api_key: str = Form(...)):
+        redirect = require_admin(request)
+        if redirect:
+            return redirect
+        try:
+            app.state.key_store.add_key(api_key)
+        except ValueError as exc:
+            return render_dashboard(request, error=str(exc), status_code=400)
+        return RedirectResponse("/dashboard", status_code=303)
+
+    @app.post("/keys/{key_id}/delete")
+    def delete_key(request: Request, key_id: str):
+        redirect = require_admin(request)
+        if redirect:
+            return redirect
+        app.state.key_store.remove_key(key_id)
+        return RedirectResponse("/dashboard", status_code=303)
 
     @app.get("/jobs/{job_id}", response_class=HTMLResponse)
     def job_page(request: Request, job_id: str):
