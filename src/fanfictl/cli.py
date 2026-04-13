@@ -76,6 +76,14 @@ def translate(
         raise typer.BadParameter("v1 only supports English output")
 
     settings = Settings()
+    if not settings.gemini_api_key:
+        typer.secho(
+            "GEMINI_API_KEY is required for translation. Put it in .env or your shell environment.",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(code=2)
+
     provider = GeminiStudioProvider(
         api_key=settings.gemini_api_key,
         model_name=model or settings.gemini_model,
