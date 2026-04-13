@@ -1,0 +1,14 @@
+.env
+.env.*
+!.env.example
+.venv/
+.opencode/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+dist/
+build/
+*.egg-info/
+output/
+data/

@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fanfictl"
+version = "0.1.0"
+description = "Translate public Pixiv fanfiction into English"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "ebooklib>=0.18",
+  "google-genai>=1.30.0",
+  "httpx>=0.27.0",
+  "markdown-it-py>=3.0.0",
+  "pydantic>=2.8.0",
+  "python-dotenv>=1.0.1",
+  "typer>=0.12.3",
+]
+
+[project.scripts]
+fanfictl = "fanfictl.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fanfictl"]
