@@ -130,16 +130,23 @@ Important ones:
 
 Recommended method:
 
-1. use the community OAuth helper referenced by PixivPy3, such as ZipFile's `pixiv_auth.py`
-2. run:
+1. use the bundled helper in this repo
+2. run locally:
 
 ```bash
-python pixiv_auth.py login
+python scripts/pixiv_refresh_token.py login
+```
+
+Or with Docker:
+
+```bash
+docker compose --profile tools run --rm --entrypoint python cli /app/scripts/pixiv_refresh_token.py login
 ```
 
 3. a browser window will open to Pixiv login
 4. sign in normally
-5. after the callback step, copy the returned `refresh_token`
+5. after the callback step, paste the full callback URL or the `code` into the helper prompt
+6. the helper prints the `refresh_token`
 6. paste that token into Fableport Settings, or store it as `PIXIV_REFRESH_TOKEN` in `.env`
 
 Notes:

@@ -103,6 +103,28 @@ Behavior:
 - `.env` can hold a system `PIXIV_REFRESH_TOKEN`
 - fallback order is: personal token -> global token -> system token
 
+### Getting a Pixiv refresh token
+
+Use the bundled helper:
+
+```bash
+python scripts/pixiv_refresh_token.py login
+```
+
+Or through Docker:
+
+```bash
+docker compose --profile tools run --rm --entrypoint python cli /app/scripts/pixiv_refresh_token.py login
+```
+
+Then:
+
+1. sign into Pixiv in the opened browser
+2. copy the callback URL or OAuth `code`
+3. paste it into the helper prompt
+4. copy the printed `refresh_token`
+5. add it in `Settings`, or put it in `.env` as `PIXIV_REFRESH_TOKEN`
+
 ## Limits
 
 Current defaults:

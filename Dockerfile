@@ -9,6 +9,7 @@ RUN mkdir -p /app/output && chown -R 1000:1000 /app/output
 
 COPY pyproject.toml README.md ./
 COPY src ./src
+COPY scripts ./scripts
 COPY tests ./tests
 
 RUN pip install --no-cache-dir .

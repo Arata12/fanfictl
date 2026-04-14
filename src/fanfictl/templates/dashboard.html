@@ -202,6 +202,7 @@
   <section class="panel">
     <h2>Personal Pixiv token</h2>
     <p class="muted">Used first for your own imports when a Pixiv work requires login.</p>
+    <p class="muted small">Use the bundled helper: <code>python scripts/pixiv_refresh_token.py login</code></p>
     {% if personal_pixiv_tokens %}
       <ul class="key-list">
         {% for token in personal_pixiv_tokens %}
